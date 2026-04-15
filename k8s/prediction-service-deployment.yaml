@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction-service
+  namespace: merma
+  labels:
+    app: prediction-service
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: prediction-service
+  template:
+    metadata:
+      labels:
+        app: prediction-service
+        tier: backend
+    spec:
+      containers:
+        - name: prediction-service
+          image: merma/prediction-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8003
+              name: http
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "8003"
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: DB_HOST
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: DB_PASSWORD
+            - name: DB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: DB_DATABASE
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: JWT_SECRET
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              value: "6379"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prediction-service
+  namespace: merma
+  labels:
+    app: prediction-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8003
+      targetPort: 8003
+      protocol: TCP
+      name: http
+  selector:
+    app: prediction-service
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: prediction-service-hpa
+  namespace: merma
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: prediction-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

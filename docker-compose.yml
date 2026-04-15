@@ -1,0 +1,324 @@
+version: '3.8'
+
+# =============================================================================
+# MERMA PROJECT - Docker Compose Configuration
+# =============================================================================
+# Multi-service orchestration with healthchecks and dependency management
+#
+# Services:
+#   - postgres: PostgreSQL 15 database
+#   - redis: Redis 7 cache
+#   - auth-service: Authentication microservice (port 8001)
+#   - inventory-service: Inventory management microservice (port 8002)
+#   - prediction-service: Demand prediction microservice (port 8003)
+#   - recommendation-service: Recommendations microservice (port 8004)
+#   - alert-service: Alert management microservice (port 8005)
+#   - frontend: React dashboard (port 3000)
+#
+# Usage:
+#   docker-compose up -d
+#   docker-compose logs -f
+#   docker-compose down
+# =============================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # PostgreSQL Database
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: merma-postgres
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-merma}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - merma-network
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Redis Cache
+  # -------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: merma-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - merma-network
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Auth Service
+  # -------------------------------------------------------------------------
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: merma-auth-service
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${AUTH_SERVICE_PORT:-8001}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-merma}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - merma-network
+    restart: unless-stopped
+
+
+  # -------------------------------------------------------------------------
+  # Inventory Service
+  # -------------------------------------------------------------------------
+  inventory-service:
+    build:
+      context: ./backend/inventory-service
+      dockerfile: Dockerfile
+    container_name: merma-inventory-service
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${INVENTORY_SERVICE_PORT:-8002}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-merma}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - merma-network
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Prediction Service
+  # -------------------------------------------------------------------------
+  prediction-service:
+    build:
+      context: ./backend/prediction-service
+      dockerfile: Dockerfile
+    container_name: merma-prediction-service
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PREDICTION_SERVICE_PORT:-8003}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-merma}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8003/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - merma-network
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Recommendation Service
+  # -------------------------------------------------------------------------
+  recommendation-service:
+    build:
+      context: ./backend/recommendation-service
+      dockerfile: Dockerfile
+    container_name: merma-recommendation-service
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${RECOMMENDATION_SERVICE_PORT:-8004}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-merma}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8004/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - merma-network
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Alert Service
+  # -------------------------------------------------------------------------
+  alert-service:
+    build:
+      context: ./backend/alert-service
+      dockerfile: Dockerfile
+    container_name: merma-alert-service
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${ALERT_SERVICE_PORT:-8005}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-merma}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8005/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - merma-network
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # Frontend
+  # -------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: merma-frontend
+    env_file:
+      - .env
+    environment:
+      REACT_APP_API_URL: http://auth-service:8001
+      REACT_APP_INVENTORY_API_URL: http://inventory-service:8002
+      REACT_APP_PREDICTION_API_URL: http://prediction-service:8003
+      REACT_APP_RECOMMENDATION_API_URL: http://recommendation-service:8004
+      REACT_APP_ALERT_API_URL: http://alert-service:8005
+      PORT: ${FRONTEND_PORT:-3000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      prediction-service:
+        condition: service_healthy
+      recommendation-service:
+        condition: service_healthy
+      alert-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - merma-network
+    restart: unless-stopped
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  merma-network:
+    driver: bridge
+    name: merma-network
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  postgres_data:
+    name: merma-postgres-data
+  redis_data:
+    name: merma-redis-data

@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-service
+  namespace: merma
+  labels:
+    app: inventory-service
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inventory-service
+  template:
+    metadata:
+      labels:
+        app: inventory-service
+        tier: backend
+    spec:
+      containers:
+        - name: inventory-service
+          image: merma/inventory-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8002
+              name: http
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "8002"
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: DB_HOST
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: DB_PASSWORD
+            - name: DB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: DB_DATABASE
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: JWT_SECRET
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              value: "6379"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service
+  namespace: merma
+  labels:
+    app: inventory-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8002
+      targetPort: 8002
+      protocol: TCP
+      name: http
+  selector:
+    app: inventory-service
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: inventory-service-hpa
+  namespace: merma
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: inventory-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

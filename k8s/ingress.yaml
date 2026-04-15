@@ -1,0 +1,203 @@
+# Kubernetes Ingress Configuration
+# Merma Project - API Gateway and Frontend Routing
+#
+# This ingress configuration provides external access to:
+# - Frontend React application
+# - Backend microservices (auth, inventory, prediction, recommendation, alert)
+#
+# Version: 1.0.0
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: merma-ingress
+  namespace: merma
+  annotations:
+    # AWS ALB Ingress Controller annotations
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    
+    # Health check configuration
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '5'
+    
+    # SSL/TLS configuration (configure certificate ARN in production)
+    # alb.ingress.kubernetes.io/ssl-cert: arn:aws:acm:REGION:ACCOUNT:certificate/CERT_ID
+    
+    # Custom timeout for API requests
+    alb.ingress.kubernetes.io/load-balancing-algorithm: round_robin
+    
+    # Enable access logs (configure S3 bucket in production)
+    # alb.ingress.kubernetes.io/access-log-s3-bucket: merma-access-logs
+    # alb.ingress.kubernetes.io/access-log-s3-bucket-prefix: elb
+  labels:
+    app: merma
+    component: ingress
+    version: '1.0'
+spec:
+  ingressClassName: alb
+  rules:
+    # Frontend application route
+    - host: merma.example.com
+      http:
+        paths:
+          # Frontend React application
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 3000
+          
+          # API routes - Backend microservices
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-api-gateway
+                port:
+                  number: 80
+          
+          # Health check endpoint
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: backend-api-gateway
+                port:
+                  number: 80
+
+---
+# Backend API Gateway Service (aggregates all microservices)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api-gateway
+  namespace: merma
+  labels:
+    app: merma
+    component: api-gateway
+    version: '1.0'
+spec:
+  type: ClusterIP
+  selector:
+    app: merma
+    component: api-gateway
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8001
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: merma
+  labels:
+    app: merma
+    component: frontend
+    version: '1.0'
+spec:
+  type: ClusterIP
+  selector:
+    app: merma
+    component: frontend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000
+
+---
+# Ingress for internal API routing (alternative configuration)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: merma-api-internal
+  namespace: merma
+  annotations:
+    kubernetes.io/ingress.class: internal-alb
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+  labels:
+    app: merma
+    component: internal-api
+    version: '1.0'
+spec:
+  ingressClassName: alb
+  rules:
+    # Auth Service
+    - host: api.merma.internal
+      http:
+        paths:
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8001
+          
+          # Inventory Service
+          - path: /inventory
+            pathType: Prefix
+            backend:
+              service:
+                name: inventory-service
+                port:
+                  number: 8002
+          
+          # Prediction Service
+          - path: /prediction
+            pathType: Prefix
+            backend:
+              service:
+                name: prediction-service
+                port:
+                  number: 8003
+          
+          # Recommendation Service
+          - path: /recommendation
+            pathType: Prefix
+            backend:
+              service:
+                name: recommendation-service
+                port:
+                  number: 8004
+          
+          # Alert Service
+          - path: /alerts
+            pathType: Prefix
+            backend:
+              service:
+                name: alert-service
+                port:
+                  number: 8005
+
+---
+# NetworkPolicy - Restrict traffic between services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: merma-network-policy
+  namespace: merma
+  labels:
+    app: merma
+    component: network-policy
+    version: '1.0'
+spec:
+  podSelector:
+    matchLabels:
+      app: merma
+  policyTypes:
+    - Ingress
+    - Egress

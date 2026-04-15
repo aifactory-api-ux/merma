@@ -1,0 +1,173 @@
+# API_CONTRACT.md
+
+## Auth Service
+
+| Method | Path               | Auth Required | Request Body Schema                                                                 | Response Schema                                                                 | Status Codes |
+|--------|--------------------|--------------|-------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|-------------|
+| POST   | /api/auth/login    | No           | `AuthRequest`<br>- email: string (required)<br>- password: string (required)        | `AuthResponse`<br>- token: string<br>- user: UserSummary                        | 200         |
+| GET    | /api/auth/me       | Yes (Bearer) | None                                                                                | `UserSummary`<br>- id: number<br>- email: string<br>- role: enum                | 200         |
+
+---
+
+## Inventory Service
+
+| Method | Path                        | Auth Required | Request Body Schema                                                                                                    | Response Schema                                                                                                   | Status Codes |
+|--------|-----------------------------|--------------|------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|-------------|
+| GET    | /api/inventory/overview     | Yes (Bearer) | None                                                                                                                   | `InventoryOverview`<br>- totalItems: number<br>- lowStockItems: InventoryItem[]<br>- expiringSoonItems: InventoryItem[]<br>- totalValue: number<br>- currency: string | 200         |
+| GET    | /api/inventory/items        | Yes (Bearer) | None                                                                                                                   | `InventoryItem[]`                                                                                                 | 200         |
+| POST   | /api/inventory/items        | Yes (Bearer) | `InventoryItem` (without `id`, `lastUpdated`)<br>- name: string (required)<br>- category: string (required)<br>- quantity: number (required)<br>- unit: string (required)<br>- expirationDate: string (ISO8601, required)<br>- location: string (required) | `InventoryItem`<br>- id: number<br>- name: string<br>- category: string<br>- quantity: number<br>- unit: string<br>- expirationDate: string<br>- location: string<br>- lastUpdated: string | 200         |
+| PUT    | /api/inventory/items/:id    | Yes (Bearer) | Partial<InventoryItem> (fields to update, all optional)<br>- name?: string<br>- category?: string<br>- quantity?: number<br>- unit?: string<br>- expirationDate?: string<br>- location?: string | `InventoryItem`<br>- id: number<br>- name: string<br>- category: string<br>- quantity: number<br>- unit: string<br>- expirationDate: string<br>- location: string<br>- lastUpdated: string | 200         |
+| DELETE | /api/inventory/items/:id    | Yes (Bearer) | None                                                                                                                   | { success: boolean }                                                                                               | 200         |
+
+---
+
+## Prediction Service
+
+| Method | Path                    | Auth Required | Request Body Schema | Query Parameters         | Response Schema                                                                                  | Status Codes |
+|--------|-------------------------|--------------|--------------------|-------------------------|--------------------------------------------------------------------------------------------------|-------------|
+| GET    | /api/predictions/demand | Yes (Bearer) | None               | date (optional, YYYY-MM-DD) | `DemandPredictionResponse`<br>- predictions: DemandPrediction[]<br>- generatedAt: string (ISO8601) | 200         |
+
+---
+
+## Recommendation Service
+
+| Method | Path                   | Auth Required | Request Body Schema | Response Schema                                                                                  | Status Codes |
+|--------|------------------------|--------------|--------------------|--------------------------------------------------------------------------------------------------|-------------|
+| GET    | /api/recommendations   | Yes (Bearer) | None               | `RecommendationResponse`<br>- recommendations: Recommendation[]<br>- generatedAt: string (ISO8601) | 200         |
+
+---
+
+## Alert Service
+
+| Method | Path                                 | Auth Required | Request Body Schema | Response Schema                                         | Status Codes |
+|--------|--------------------------------------|--------------|--------------------|---------------------------------------------------------|-------------|
+| GET    | /api/alerts                          | Yes (Bearer) | None               | `AlertResponse`<br>- alerts: Alert[]                    | 200         |
+| POST   | /api/alerts/:id/acknowledge          | Yes (Bearer) | None               | { success: boolean }                                    | 200         |
+
+---
+
+### Data Schemas
+
+#### AuthRequest
+
+```typescript
+{
+  email: string;
+  password: string;
+}
+```
+
+#### AuthResponse
+
+```typescript
+{
+  token: string;
+  user: {
+    id: number;
+    email: string;
+    role: 'admin' | 'manager' | 'chef' | 'staff';
+  }
+}
+```
+
+#### UserSummary
+
+```typescript
+{
+  id: number;
+  email: string;
+  role: 'admin' | 'manager' | 'chef' | 'staff';
+}
+```
+
+#### InventoryItem
+
+```typescript
+{
+  id: number;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  expirationDate: string; // ISO8601
+  location: string;
+  lastUpdated: string; // ISO8601
+}
+```
+
+#### InventoryOverview
+
+```typescript
+{
+  totalItems: number;
+  lowStockItems: InventoryItem[];
+  expiringSoonItems: InventoryItem[];
+  totalValue: number;
+  currency: string;
+}
+```
+
+#### DemandPrediction
+
+```typescript
+{
+  itemId: number;
+  itemName: string;
+  predictedDemand: number;
+  predictionDate: string; // ISO8601
+  confidence: number; // 0-1
+}
+```
+
+#### DemandPredictionResponse
+
+```typescript
+{
+  predictions: DemandPrediction[];
+  generatedAt: string; // ISO8601
+}
+```
+
+#### Recommendation
+
+```typescript
+{
+  id: number;
+  itemId: number;
+  itemName: string;
+  action: 'order_more' | 'reduce_stock' | 'promote_sale' | 'monitor';
+  reason: string;
+  createdAt: string; // ISO8601
+}
+```
+
+#### RecommendationResponse
+
+```typescript
+{
+  recommendations: Recommendation[];
+  generatedAt: string; // ISO8601
+}
+```
+
+#### Alert
+
+```typescript
+{
+  id: number;
+  type: 'risk' | 'stockout' | 'expiration';
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+  relatedItemId: number | null;
+  createdAt: string; // ISO8601
+  acknowledged: boolean;
+}
+```
+
+#### AlertResponse
+
+```typescript
+{
+  alerts: Alert[];
+}
+```

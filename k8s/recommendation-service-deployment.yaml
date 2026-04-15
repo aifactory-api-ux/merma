@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendation-service
+  namespace: merma
+  labels:
+    app: recommendation-service
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: recommendation-service
+  template:
+    metadata:
+      labels:
+        app: recommendation-service
+        tier: backend
+    spec:
+      containers:
+        - name: recommendation-service
+          image: merma/recommendation-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8004
+              name: http
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "8004"
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: DB_HOST
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: DB_PASSWORD
+            - name: DB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: DB_DATABASE
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: merma-secrets
+                  key: JWT_SECRET
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: merma-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              value: "6379"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendation-service
+  namespace: merma
+  labels:
+    app: recommendation-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8004
+      targetPort: 8004
+      protocol: TCP
+      name: http
+  selector:
+    app: recommendation-service
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: recommendation-service-hpa
+  namespace: merma
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: recommendation-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
